@@ -89,7 +89,7 @@ class FenwickTree:
         _require_int(high, "区间上界")
         if low > high:
             return 0
-        return self.prefix(high) - self.prefix(low)
+        return self.prefix(high) - self.prefix(low - 1)
 
     def select(self, order):
         """返回最小的下标 index 使 prefix(index) 不小于 order。
@@ -101,7 +101,7 @@ class FenwickTree:
         step = 1 << (self._size.bit_length() - 1)
         while step:
             nxt = index + step
-            if nxt <= self._size and self._tree[nxt] <= order:
+            if nxt <= self._size and self._tree[nxt] < order:
                 index = nxt
                 order -= self._tree[nxt]
             step >>= 1
@@ -157,7 +157,7 @@ class Leaderboard:
     def score_of(self, player):
         """玩家当前分数；没上过榜的返回 None。"""
         _require_player(player)
-        return self._scores.get(player, 0)
+        return self._scores.get(player)
 
     def count_at(self, score):
         """分数正好是 score 的玩家数。"""
@@ -184,12 +184,7 @@ class Leaderboard:
             return None
         score = self._scores[player]
         above = self.player_count() - self._tree.prefix(self._index_of(score))
-        peers = self._roster.get(score)
-        earlier = 0
-        if peers:
-            own = self._order[player]
-            earlier = sum(1 for name in peers if self._order[name] < own)
-        return above + earlier + 1
+        return above + 1
 
     def player_at_rank(self, rank):
         """名次 rank 上的 (玩家, 分数)；名次从 1 开始，越界返回 None。"""
@@ -212,7 +207,7 @@ class Leaderboard:
     def top(self, count):
         """按名次顺序取前 count 名，元素是 (玩家, 分数)；不为正时返回空表。"""
         _require_int(count, "数量")
-        if count == 0:
+        if count <= 0:
             return []
         return self._ordered()[:count]
 
@@ -227,10 +222,11 @@ class Leaderboard:
         if previous is not None and previous != score:
             self._roster[previous].discard(player)
             self._tree.add(self._index_of(previous), -1)
-        self._roster.setdefault(score, set()).add(player)
+        if previous != score:
+            self._roster.setdefault(score, set()).add(player)
+            self._tree.add(self._index_of(score), 1)
         self._next_order += 1
         self._order[player] = self._next_order
-        self._tree.add(self._index_of(score), 1)
         return previous
 
     def remove(self, player):
@@ -239,6 +235,8 @@ class Leaderboard:
         if player not in self._scores:
             return False
         score = self._scores.pop(player)
+        self._roster[score].discard(player)
+        self._order.pop(player, None)
         self._tree.add(self._index_of(score), -1)
         return True
 
@@ -258,4 +256,4 @@ class Leaderboard:
     def _ordered(self):
         """全部玩家按名次顺序排列：分数从高到低，同分按提交次序。"""
         return sorted(self._scores.items(),
-                      key=lambda item: (-item[1], -self._order[item[0]]))
+                      key=lambda item: (-item[1], self._order[item[0]]))
